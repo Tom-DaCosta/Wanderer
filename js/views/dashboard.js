@@ -3,7 +3,7 @@
    ===================================================== */
 import { appData, commitData, rerender } from '../app.js';
 import { openModal, openConfirm, showToast } from '../utils/modal.js';
-import { saveData, resetData, genId } from '../data.js';
+import { saveData, resetData, genId, getSyncCode, setSyncCode, pullFromCloud, pushToCloud } from '../data.js';
 
 export function renderDashboard(container) {
   const data     = appData;
@@ -82,6 +82,20 @@ export function renderDashboard(container) {
           <button class="btn btn-ghost btn-sm" id="edit-trip-btn"><i class="fa-solid fa-pen"></i> Modifier</button>
           <button class="btn btn-ghost btn-sm" id="reset-data-btn" title="Recharger les données par défaut"><i class="fa-solid fa-rotate"></i> Reset</button>
         </div>
+      </div>
+
+      <!-- Cloud Sync Banner -->
+      <div class="card" style="margin-bottom:var(--sp-4);padding:var(--sp-3) var(--sp-4);background:linear-gradient(135deg, rgba(59,130,246,0.1), rgba(34,197,94,0.1));border:1px solid rgba(59,130,246,0.25);display:flex;align-items:center;justify-content:space-between">
+        <div style="display:flex;align-items:center;gap:0.6rem">
+          <span style="font-size:1.2rem;color:var(--color-info)">☁️</span>
+          <div>
+            <div style="font-size:var(--fs-xs);font-weight:700;color:var(--text-primary)">Synchronisation Cloud Multi-Appareils</div>
+            <div style="font-size:0.68rem;color:var(--text-muted)">Code unique : <strong style="color:var(--color-success);font-size:0.75rem">${getSyncCode()}</strong></div>
+          </div>
+        </div>
+        <button class="btn btn-ghost btn-sm" id="cloud-sync-btn" style="color:var(--color-info);border:1px solid rgba(59,130,246,0.3)">
+          <i class="fa-solid fa-sync"></i> Gérer
+        </button>
       </div>
 
       <!-- Countdown -->
@@ -249,6 +263,39 @@ export function renderDashboard(container) {
       rerender();
       showToast('Données réinitialisées avec succès ! 🇯🇵', 'success');
     }
+  });
+
+  // Cloud Sync button
+  document.getElementById('cloud-sync-btn')?.addEventListener('click', () => {
+    const currentCode = getSyncCode();
+    openModal({
+      title: '☁️ Synchronisation Cloud Multi-Appareils',
+      fields: [
+        { key: 'syncCode', label: 'Code de synchronisation', type: 'text', required: true, hint: 'Partagez ce code avec votre téléphone ou vos compagnons de voyage.' },
+      ],
+      data: { syncCode: currentCode },
+      onSave(d) {
+        if (d.syncCode && d.syncCode.trim() !== currentCode) {
+          setSyncCode(d.syncCode);
+          showToast('Connexion au Code Cloud...', 'info');
+          pullFromCloud().then(cloudData => {
+            if (cloudData && cloudData.trip) {
+              Object.assign(appData, cloudData);
+              saveData(appData);
+              rerender();
+              showToast('Données synchronisées depuis le Cloud ! ☁️', 'success');
+            } else {
+              pushToCloud(appData);
+              rerender();
+              showToast('Nouveau Code lié et sauvegardé sur le Cloud ! ☁️', 'success');
+            }
+          });
+        } else {
+          pushToCloud(appData);
+          showToast('Données synchronisées sur le Cloud ! ☁️', 'success');
+        }
+      },
+    });
   });
 }
 

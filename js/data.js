@@ -343,15 +343,95 @@ export function loadData() {
   return freshData;
 }
 
-/** Save entire data object to localStorage */
+/** Save entire data object to localStorage and trigger cloud sync */
 export function saveData(data) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  pushToCloud(data);
 }
 
 /** Reset to default data */
 export function resetData() {
   localStorage.removeItem(STORAGE_KEY);
-  return JSON.parse(JSON.stringify(DEFAULT_DATA));
+  const fresh = JSON.parse(JSON.stringify(DEFAULT_DATA));
+  saveData(fresh);
+  return fresh;
+}
+
+// =====================================================
+// REAL-TIME FREE CLOUD SYNC MODULE (jsonblob API)
+// =====================================================
+const SYNC_CODE_KEY = 'voyage_sync_code';
+const API_BASE      = 'https://jsonblob.com/api/jsonBlob';
+
+export function getSyncCode() {
+  let code = localStorage.getItem(SYNC_CODE_KEY);
+  if (!code) {
+    code = 'JAPON-2026-' + Math.random().toString(36).substring(2, 7).toUpperCase();
+    localStorage.setItem(SYNC_CODE_KEY, code);
+  }
+  return code;
+}
+
+export function setSyncCode(newCode) {
+  const formatted = newCode.trim().toUpperCase();
+  localStorage.setItem(SYNC_CODE_KEY, formatted);
+  return formatted;
+}
+
+/** Push current appData to the Cloud */
+export async function pushToCloud(data) {
+  try {
+    const code = getSyncCode();
+    const blobIdKey = 'voyage_blob_id_' + code;
+    let blobId = localStorage.getItem(blobIdKey);
+
+    if (blobId) {
+      const res = await fetch(`${API_BASE}/${blobId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      if (res.ok) return true;
+    }
+
+    // Create new blob if none exists or update failed
+    const res = await fetch(API_BASE, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+
+    if (res.ok) {
+      const location = res.headers.get('Location');
+      if (location) {
+        const newBlobId = location.split('/').pop();
+        localStorage.setItem(blobIdKey, newBlobId);
+        return true;
+      }
+    }
+  } catch (e) {
+    console.warn('Cloud sync push error:', e);
+  }
+  return false;
+}
+
+/** Pull latest appData from the Cloud */
+export async function pullFromCloud() {
+  try {
+    const code = getSyncCode();
+    const blobIdKey = 'voyage_blob_id_' + code;
+    const blobId = localStorage.getItem(blobIdKey);
+    if (!blobId) return null;
+
+    const res = await fetch(`${API_BASE}/${blobId}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.trip) return data;
+    }
+  } catch (e) {
+    console.warn('Cloud sync pull error:', e);
+  }
+  return null;
 }
 
 /** Generate a short unique ID */

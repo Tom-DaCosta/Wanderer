@@ -3,7 +3,7 @@
    Japan Travel Dashboard
    ===================================================== */
 
-import { loadData, saveData } from './data.js';
+import { loadData, saveData, pullFromCloud, pushToCloud } from './data.js';
 import { renderDashboard  } from './views/dashboard.js';
 import { renderFlights    } from './views/flights.js';
 import { renderMap        } from './views/map.js';
@@ -120,10 +120,20 @@ export function rerender() {
 // =====================================================
 // APP INIT
 // =====================================================
-function init() {
+async function init() {
   initTheme();
   initNav();
   navigateTo('dashboard');
+
+  // Asynchronously check cloud for updates on startup
+  try {
+    const cloudData = await pullFromCloud();
+    if (cloudData && cloudData.trip) {
+      Object.assign(appData, cloudData);
+      localStorage.setItem('voyage_japon_data', JSON.stringify(appData));
+      rerender();
+    }
+  } catch (e) {}
 }
 
 document.addEventListener('DOMContentLoaded', init);
